@@ -1,27 +1,32 @@
 // app/components/PDFViewerWrapper.tsx
 'use client';
-
 import React from 'react';
-// Import the runtime library as usual for CJS compatibility
 import ReactPDF from '@react-pdf/renderer';
-// Import the specific type definition for Document props
 import type { DocumentProps } from '@react-pdf/renderer';
 
 const { PDFViewer } = ReactPDF;
 
 interface PDFViewerWrapperProps {
-  // FIX: We specifically type children to be a ReactElement that has DocumentProps.
-  // This satisfies the strict typing of PDFViewer.
   children: React.ReactElement<DocumentProps>;
   className?: string;
 }
 
 const PDFViewerWrapper = ({ children, className }: PDFViewerWrapperProps) => {
   return (
-    <PDFViewer className={className} showToolbar={true}>
+    <PDFViewer 
+      width="100%" 
+      height="100%" 
+      className={className}
+      showToolbar={false}
+      style={{ 
+        border: 'none', 
+        height: '100%', 
+        width: '100%',
+        backgroundColor: 'transparent' // Prova a togliere il colore di background dell'iframe
+      }} 
+    >
       {children}
     </PDFViewer>
   );
 };
-
 export default PDFViewerWrapper;

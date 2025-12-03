@@ -1,178 +1,187 @@
-// app/page.tsx
 'use client';
 
 import React, { useState, useTransition } from 'react';
 import dynamic from 'next/dynamic';
-import { generateBackground } from './actions/generateImage';
-import { PosterDocument } from './documents/PosterDocument';
-import './globals.css';
 
-const PDFViewerDynamic = dynamic(
-  () => import('./components/PDFViewerWrapper'),
-  { ssr: false, loading: () => <div className="h-[600px] bg-gray-100 animate-pulse flex items-center justify-center text-gray-500 font-medium">Loading PDF Engine...</div> }
+// Import actions
+import { analyzeStyle, ExtractedStyle } from './actions/analyzeStyle';
+import { generateBackgroundWithStyle } from './actions/generateImage';
+
+// Import PDF components
+import { PosterDocument } from './documents/PosterDocument';
+
+
+// In cima a page.tsx
+const PosterPreviewDynamic = dynamic(
+  () => import('./components/PosterPreview'),
+  { ssr: false, loading: () => <p>Caricamento...</p> }
 );
 
-// --- NEW: Define a reliable placeholder image URL (A4 portrait ratio) ---
-const PLACEHOLDER_IMAGE_URL = "https://images.unsplash.com/photo-1614850523459-c2f4c699c52e?q=80&w=1000&auto=format&fit=crop&ixlib=rb-4.0.3";
-
 export default function Home() {
-  const [formData, setFormData] = useState({
-    title: 'AI in 2025 Summit',
-    agenda: '09:00 AM - Keynote: The Future of Models\n10:30 AM - Workshop: Prompt Engineering\n01:00 PM - Panel: Ethics & Safety\n03:00 PM - Closing Remarks',
-    description: 'A futuristic conference discussing the advancements of generative models in professional workflows. Exploring the boundaries of creativity and logic.',
-  });
-
-  // --- CHANGED: Initialize with the placeholder URL instead of null ---
-  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(PLACEHOLDER_IMAGE_URL);
-
-  // State for the background toggle (defaults to true)
-  const [showBackground, setShowBackground] = useState(true);
+  // --- STATE ---
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
 
-  // Determine if the switch should be active based on if we have an image URL
-  // (With placeholder, this is now always true initially)
-  const hasImage = !!generatedImageUrl;
+  // Form Data
+  const [title, setTitle] = useState("My Event");
+  const [description, setDescription] = useState("An amazing techno party on the beach.");
+  const [agenda, setAgenda] = useState("10:00 - Welcome\n12:00 - Music Start");
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
+  // Style State
+  const [extractedStyle, setExtractedStyle] = useState<ExtractedStyle | null>(null);
+ // IMPOSTA L'IMMAGINE DI DEFAULT QUI:
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(
+    "https://res.cloudinary.com/df6c6fogf/image/upload/v1764764285/my-poster-app/vertex-generations/img_1764764284010_708.png"
+  );
+  
+  // --- HANDLERS ---
+
+  // 1. Analyze Style (Step 1)
+  const handleStyleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    startTransition(async () => {
+      // Convert to Base64 for Server Action
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const result = await analyzeStyle(base64);
+
+        if (result) {
+          setExtractedStyle(result);
+          console.log("Style Extracted:", result);
+        } else {
+          alert("Failed to analyze style.");
+        }
+      };
+      reader.readAsDataURL(file);
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
+  // 2. Generate Background (Step 2)
+  const handleGenerate = () => {
     startTransition(async () => {
-      try {
-        // Client-side logging
-        console.log("[Client] Requesting new background generation...");
-        const result = await generateBackground({
-          title: formData.title,
-          description: formData.description,
-        });
+      // If we have an extracted style, use it. Otherwise use a default generic style.
+      const stylePrompt = extractedStyle?.styleDescription ||
+        "Abstract, modern, clean, high quality event poster background";
 
-        if (result.error) {
-          console.error("[Client] Server reported error:", result.error);
-          setError(result.error);
-        } else if (result.url) {
-          console.log(`[Client] Success. Received image URL (Length: ${result.url.length}). Updating state.`);
-          // Replace the placeholder with the generated image
-          setGeneratedImageUrl(result.url);
-          setShowBackground(true);
-        }
-      } catch (err) {
-          console.error("--- CRITICAL CLIENT ERROR ---", err);
-          setError("An unexpected error occurred on the client.");
+      const url = await generateBackgroundWithStyle({
+        userTopic: `${title} - ${description}`,
+        styleDescription: stylePrompt
+      });
+
+      if (url) {
+        setGeneratedImageUrl(url);
+      } else {
+        alert("Failed to generate image.");
       }
     });
   };
 
+  // Data object for PDF
+  const posterData = {
+    title,
+    description,
+    agenda,
+    imageUrl: generatedImageUrl,
+    // Use the overlay color suggested by AI, or fallback to default
+    overlayColor: extractedStyle?.overlayColor || 'rgba(0,0,0,0.4)',
+    showBackground: true
+  };
+
   return (
-    <main className="min-h-screen bg-gray-100 p-4 md:p-8 font-sans">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-8 h-full">
+    <main className="flex min-h-screen flex-col md:flex-row p-6 gap-6 bg-gray-50 font-sans">
 
-      {/* LEFT COLUMN: INPUT FORM */}
-      <div className="w-full md:w-1/3 bg-white p-6 rounded-xl shadow-lg h-fit border border-gray-200">
-        <h1 className="text-2xl font-bold mb-6 text-gray-800">Event Poster Creator</h1>
+      {/* --- LEFT COLUMN: CONTROLS --- */}
+      <div className="w-full md:w-1/3 space-y-8 bg-white p-6 rounded-xl shadow-sm border border-gray-200">
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label htmlFor="title" className="block text-sm font-semibold text-gray-700 mb-2">Event Title</label>
-            <input
-              type="text"
-              id="title"
-              name="title"
-              value={formData.title}
-              onChange={handleInputChange}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900"
-              required
-            />
-          </div>
+        <h1 className="text-2xl font-bold text-gray-800 mb-6">AI Poster Generator</h1>
 
-          <div>
-            <label htmlFor="description" className="block text-sm font-semibold text-gray-700 mb-2">Description (Influences Background)</label>
-            <textarea
-              id="description"
-              name="description"
-              rows={4}
-              value={formData.description}
-              onChange={handleInputChange}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 resize-none"
-              required
-            />
-          </div>
+        {/* Section 1: Style Reference */}
+        <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+          <h2 className="font-semibold flex items-center gap-2 text-gray-700">
+            <span>📂</span> 1. Carica Stile di Riferimento
+          </h2>
+          <p className="text-xs text-slate-500">
+            Carica un poster che ti piace. L'IA copierà lo stile per il tuo sfondo.
+          </p>
 
-          <div>
-            <label htmlFor="agenda" className="block text-sm font-semibold text-gray-700 mb-2">Agenda (One item per line)</label>
-            <textarea
-              id="agenda"
-              name="agenda"
-              rows={6}
-              value={formData.agenda}
-              onChange={handleInputChange}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 resize-none font-mono text-sm"
-              required
-            />
-          </div>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleStyleUpload}
+            disabled={isPending}
+            className="block w-full text-sm text-slate-500
+              file:mr-4 file:py-2 file:px-4
+              file:rounded-full file:border-0
+              file:text-sm file:font-semibold
+              file:bg-blue-50 file:text-blue-700
+              hover:file:bg-blue-100 cursor-pointer"
+          />
 
-          {/* UPDATED TOGGLE SWITCH UI */}
-          <div className={`flex items-center space-x-3 bg-gray-50 p-3 rounded-lg border ${hasImage ? 'border-gray-200' : 'border-gray-100 opacity-60'}`}>
-            <input
-                type="checkbox"
-                id="showBgSwitch"
-                disabled={!hasImage}
-                checked={hasImage && showBackground}
-                onChange={(e) => setShowBackground(e.target.checked)}
-                className={`w-5 h-5 rounded border-gray-300 focus:ring-blue-500 ${hasImage ? 'text-blue-600 cursor-pointer' : 'text-gray-400 cursor-not-allowed'}`}
-            />
-            <label htmlFor="showBgSwitch" className={`text-sm font-medium select-none ${hasImage ? 'text-gray-700 cursor-pointer' : 'text-gray-500 cursor-not-allowed'}`}>
-                {hasImage ? 'Show Background Image' : 'Generate an image to enable background'}
-            </label>
-          </div>
-
-
-          {error && (
-            <div className="p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm rounded-md">
-              <strong>Error:</strong> {error}
+          {extractedStyle && (
+            <div className="text-xs text-green-600 font-medium animate-pulse border-l-2 border-green-500 pl-2 mt-2">
+              ✓ Stile Estratto: "{extractedStyle.styleDescription.slice(0, 30)}..."
             </div>
           )}
-
-          <button
-            type="submit"
-            disabled={isPending}
-            className={`w-full py-3 px-4 rounded-lg text-white font-bold text-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-md
-              ${isPending
-                ? 'bg-blue-400 cursor-not-allowed opacity-80'
-                : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800'
-              }
-            `}
-          >
-            {isPending ? (
-              <span className="flex items-center justify-center">
-                <span className="loader mr-3"></span>
-                Generating Image...
-              </span>
-            ) : 'Generate New Background'}
-          </button>
-        </form>
-      </div>
-
-      {/* RIGHT COLUMN: PDF PREVIEW */}
-      <div className="w-full md:w-2/3 bg-gray-800/90 backdrop-blur-sm rounded-xl shadow-2xl p-4 flex items-center justify-center overflow-hidden border border-gray-700">
-        <div className="h-[85vh] w-full max-w-[60vh] shadow-xl rounded-lg overflow-hidden bg-white">
-             <PDFViewerDynamic className="w-full h-full">
-                 <PosterDocument data={{
-                   ...formData,
-                   imageUrl: generatedImageUrl,
-                   // Pass the combined truthy state to the PDF
-                   showBackground: hasImage && showBackground
-                  }} />
-             </PDFViewerDynamic>
         </div>
+
+        {/* Section 2: Content */}
+        <div className="space-y-4">
+          <h2 className="font-semibold text-gray-700 border-b pb-2">2. Contenuto Evento</h2>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Titolo Evento</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Descrizione / Vibe</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Agenda</label>
+            <textarea
+              value={agenda}
+              onChange={(e) => setAgenda(e.target.value)}
+              rows={3}
+              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+            />
+          </div>
+        </div>
+
+        {/* Section 3: Generate Action */}
+        <button
+          className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+          onClick={handleGenerate}
+          disabled={isPending}
+        >
+          {isPending ? (
+            <><span>⏳</span> Elaborazione in corso...</>
+          ) : (
+            <><span>✨</span> Genera Poster</>
+          )}
+        </button>
       </div>
+
+      {/* --- RIGHT COLUMN: PREVIEW --- */}
+      <div className="w-full md:w-2/3 bg-slate-200 rounded-xl border border-slate-300 flex flex-col items-center justify-center p-8 min-h-[600px]">
+
+        <h2 className="text-xl font-bold text-slate-700 mb-4">Anteprima & Export</h2>
+
+        {/* Passiamo il documento come prop "document" (non children) perché usePDF lo vuole così */}
+        <PosterPreviewDynamic document={<PosterDocument data={posterData} />} />
 
       </div>
     </main>
