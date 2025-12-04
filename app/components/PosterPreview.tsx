@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react'; // Aggiunto useRef
 import { StyleTemplate } from '@/app/actions/analyzeStyle';
 
 export interface PosterData {
@@ -15,19 +15,18 @@ export interface PosterData {
 
 interface PosterPreviewProps {
   data: PosterData;
-  isAnalizing?: boolean; // <--- NUOVA PROP OPZIONALE
+  isAnalizing?: boolean;
 }
 
-// Funzione helper per sanitizzare il titolo (puoi metterla fuori dal componente)
+// Funzione helper per sanitizzare il titolo
 const getSafeFilename = (title?: string) => {
   if (!title) return 'poster.pdf';
-  // Rimuove caratteri speciali, spazi -> trattini, tutto minuscolo
   const safeTitle = title
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9\s-]/g, '') // Rimuove caratteri non alfanumerici (eccetto spazi e trattini)
-    .replace(/[\s]+/g, '-')       // Converte spazi in trattini
-    .replace(/-+/g, '-');         // Rimuove trattini doppi
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[\s]+/g, '-')
+    .replace(/-+/g, '-');
   
   return `${safeTitle}.pdf`;
 };
@@ -37,24 +36,27 @@ const PosterPreview = ({ data, isAnalizing = false }: PosterPreviewProps) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Refs per gestire debounce e cambio immagine
+  const lastImageUrlRef = useRef<string | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     let cancelled = false;
 
     const generate = async () => {
-      // 1. CONTROLLO PREVENTIVO: Se mancano i dati, non chiamare l'API
       // SE STA ANALIZZANDO, FERMATI!
       if (isAnalizing) return;
+      
+      // 1. CONTROLLO PREVENTIVO
       if (!data.title || !data.description) {
-        if (!cancelled) {
-          // Opzionale: resetta l'URL se i dati vengono cancellati
-          // setPdfUrl(null); 
-        }
         return;
       }
 
       try {
         setLoading(true);
         setError(null);
+
+        console.log("Generazione PDF..."); // Debug log
 
         const res = await fetch('/api/poster', {
           method: 'POST',
@@ -70,8 +72,14 @@ const PosterPreview = ({ data, isAnalizing = false }: PosterPreviewProps) => {
         const blob = await res.blob();
         if (cancelled) return;
 
+        // Se c'era un URL precedente, puliscilo (opzionale ma buona pratica)
+        if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+
         const url = URL.createObjectURL(blob);
         setPdfUrl(url);
+        
+        // Aggiorna ref immagine
+        lastImageUrlRef.current = data.imageUrl;
 
       } catch (e: any) {
         console.error("Preview error:", e);
@@ -81,15 +89,22 @@ const PosterPreview = ({ data, isAnalizing = false }: PosterPreviewProps) => {
       }
     };
 
-    // Debounce leggero per evitare troppe chiamate mentre scrivi
-    const timeoutId = setTimeout(() => {
+    // LOGICA DEBOUNCE INTELLIGENTE
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+    // Se l'immagine è cambiata rispetto all'ultimo render riuscito,
+    // usa un debounce brevissimo (100ms) per aggiornare subito.
+    // Altrimenti (solo testo cambiato), usa debounce standard (600ms).
+    const isImageChange = data.imageUrl !== lastImageUrlRef.current;
+    const debounceTime = isImageChange ? 100 : 600;
+
+    timeoutRef.current = setTimeout(() => {
       generate();
-    }, 500);
+    }, debounceTime);
 
     return () => {
       cancelled = true;
-      clearTimeout(timeoutId);
-      // Non revochiamo l'URL qui per evitare flickering, lo farà il prossimo setPdfUrl
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, [
     isAnalizing,
@@ -98,8 +113,11 @@ const PosterPreview = ({ data, isAnalizing = false }: PosterPreviewProps) => {
     data.agenda,
     data.location,
     data.showBackground,
+    data.imageUrl, // <--- Assicurati che questo sia qui!
+    data.overlayColor, // Aggiunto per completezza se cambia colore overlay
     JSON.stringify(data.layout)
   ]);
+
 
   // STATO 1: Dati mancanti
   if (!data.title || !data.description) {
@@ -112,8 +130,8 @@ const PosterPreview = ({ data, isAnalizing = false }: PosterPreviewProps) => {
     );
   }
 
-  // STATO 2: Caricamento
-  if (loading) {
+  // STATO 2: Caricamento INIZIALE (solo se non c'è ancora un PDF)
+  if (loading && !pdfUrl) {
     return (
       <div className="flex flex-col items-center justify-center h-[600px] bg-slate-50 border rounded-lg">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
@@ -121,11 +139,11 @@ const PosterPreview = ({ data, isAnalizing = false }: PosterPreviewProps) => {
       </div>
     );
   }
-  // OPZIONALE: Mostra un overlay di caricamento "Analisi Stile..." se vuoi
+
+  // OPZIONALE: Overlay Analisi
   if (isAnalizing) {
     return (
       <div className="flex flex-col items-center justify-center h-[600px] bg-slate-50 border rounded-lg relative overflow-hidden">
-         {/* Se vuoi mantenere il vecchio PDF sotto in trasparenza, servirebbe salvare l'url precedente */}
          <div className="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-10">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div>
             <p className="text-purple-700 font-medium animate-pulse">Analisi stile in corso...</p>
@@ -151,25 +169,25 @@ const PosterPreview = ({ data, isAnalizing = false }: PosterPreviewProps) => {
     );
   }
 
- // ... imports uguali
-
- // STATO 4: Anteprima pronta
+  // STATO 4: Anteprima pronta
   if (!pdfUrl) return null;
 
   const filename = getSafeFilename(data.title);
 
   return (
-    // w-full assicura che il componente prenda tutta la larghezza del genitore
     <div className="flex flex-col gap-6 w-full">
       
-      {/* Contenitore Preview: w-full e NESSUN max-w */}
-      <div className="w-full bg-slate-100 rounded-xl border border-slate-200 p-4">
+      {/* Contenitore Preview */}
+      <div className="w-full bg-slate-100 rounded-xl border border-slate-200 p-4 relative">
         
-        {/* Wrapper del foglio: w-full forza la larghezza al 100% del contenitore grigio */}
-        {/* aspect-[1/1.414] calcola l'altezza necessaria automaticamente */}
+        {/* Overlay di caricamento trasparente (quando rigenera con PDF già visibile) */}
+        {loading && (
+           <div className="absolute inset-0 z-20 bg-white/50 flex items-center justify-center backdrop-blur-[1px] rounded-xl">
+              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+           </div>
+        )}
+
         <div className="relative w-full shadow-2xl bg-white aspect-[1/1.414] overflow-hidden rounded-sm">
-           
-           {/* Iframe con zoom hack per tagliare bordi */}
            <iframe 
              src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`} 
              className="absolute border-none"
