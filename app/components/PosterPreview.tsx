@@ -11,6 +11,7 @@ export interface PosterData {
   imageUrl: string | null;
   showBackground: boolean;
   layout?: StyleTemplate['layout'];
+  overlayColor?: string; // <--- AGGIUNGI QUESTO SE MANCA (col punto interrogativo se opzionale)
 }
 
 interface PosterPreviewProps {
@@ -27,7 +28,7 @@ const getSafeFilename = (title?: string) => {
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/[\s]+/g, '-')
     .replace(/-+/g, '-');
-  
+
   return `${safeTitle}.pdf`;
 };
 
@@ -46,7 +47,7 @@ const PosterPreview = ({ data, isAnalizing = false }: PosterPreviewProps) => {
     const generate = async () => {
       // SE STA ANALIZZANDO, FERMATI!
       if (isAnalizing) return;
-      
+
       // 1. CONTROLLO PREVENTIVO
       if (!data.title || !data.description) {
         return;
@@ -77,7 +78,7 @@ const PosterPreview = ({ data, isAnalizing = false }: PosterPreviewProps) => {
 
         const url = URL.createObjectURL(blob);
         setPdfUrl(url);
-        
+
         // Aggiorna ref immagine
         lastImageUrlRef.current = data.imageUrl;
 
@@ -144,10 +145,10 @@ const PosterPreview = ({ data, isAnalizing = false }: PosterPreviewProps) => {
   if (isAnalizing) {
     return (
       <div className="flex flex-col items-center justify-center h-[600px] bg-slate-50 border rounded-lg relative overflow-hidden">
-         <div className="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-10">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div>
-            <p className="text-purple-700 font-medium animate-pulse">Analisi stile in corso...</p>
-         </div>
+        <div className="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-10">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mb-4"></div>
+          <p className="text-purple-700 font-medium animate-pulse">Analisi stile in corso...</p>
+        </div>
       </div>
     );
   }
@@ -176,37 +177,37 @@ const PosterPreview = ({ data, isAnalizing = false }: PosterPreviewProps) => {
 
   return (
     <div className="flex flex-col gap-6 w-full">
-      
+
       {/* Contenitore Preview */}
       <div className="w-full bg-slate-100 rounded-xl border border-slate-200 p-4 relative">
-        
+
         {/* Overlay di caricamento trasparente (quando rigenera con PDF già visibile) */}
         {loading && (
-           <div className="absolute inset-0 z-20 bg-white/50 flex items-center justify-center backdrop-blur-[1px] rounded-xl">
-              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-           </div>
+          <div className="absolute inset-0 z-20 bg-white/50 flex items-center justify-center backdrop-blur-[1px] rounded-xl">
+            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          </div>
         )}
 
         <div className="relative w-full shadow-2xl bg-white aspect-[1/1.414] overflow-hidden rounded-sm">
-           <iframe 
-             src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`} 
-             className="absolute border-none"
-             title="PDF Preview"
-             style={{ 
-               width: '104%', 
-               height: '104%', 
-               top: '-2%', 
-               left: '-2%',
-               pointerEvents: 'auto'
-             }}
-           />
+          <iframe
+            src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+            className="absolute border-none"
+            title="PDF Preview"
+            style={{
+              width: '104%',
+              height: '104%',
+              top: '-2%',
+              left: '-2%',
+              pointerEvents: 'auto'
+            }}
+          />
         </div>
       </div>
-      
+
       {/* Footer */}
       <div className="flex justify-center">
-        <a 
-          href={pdfUrl} 
+        <a
+          href={pdfUrl}
           download={filename}
           className="flex flex-col items-center group"
         >
