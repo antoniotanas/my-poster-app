@@ -35,7 +35,7 @@ try {
     console.error("Failed to write temp creds:", e);
 }
 
-export const ai_client_new = new GoogleGenAI({
+export const ai_client = new GoogleGenAI({
   vertexai: true,
   project,
   location,

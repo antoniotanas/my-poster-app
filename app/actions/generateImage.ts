@@ -1,6 +1,6 @@
 'use server';
 
-import { ai_client_new } from '@/app/lib/vertex'; // Nota: importiamo ai_client ora
+import { ai_client } from '@/app/lib/vertex'; // Nota: importiamo ai_client ora
 import { uploadImage } from '@/app/lib/cloudinary';
 
 interface GenerateParams {
@@ -19,7 +19,7 @@ export async function generateBackgroundWithStyle(params: GenerateParams): Promi
 
    console.log("Generating with Imagen 3 (New SDK)...");
 
-    const response = await ai_client_new.models.generateImages({
+    const response = await ai_client.models.generateImages({
       model: 'imagen-3.0-generate-001', 
       prompt: finalPrompt,
       config: {

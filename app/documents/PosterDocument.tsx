@@ -1,9 +1,7 @@
 // app/documents/PosterDocument.tsx
 import React from 'react';
-import ReactPDF from '@react-pdf/renderer';
-
-// Destructure components.
-const { Page, Text, View, Document, StyleSheet, Image, Font } = ReactPDF;
+import { Document, Page, Text, View, StyleSheet, Image, Font } from '@react-pdf/renderer';
+import { StyleTemplate } from '@/app/actions/analyzeStyle';
 
 // --- REGISTER FONTS ---
 Font.register({
@@ -14,26 +12,43 @@ Font.register({
   ],
 });
 
+// Definiamo un tipo specifico per l'allineamento flex valido in React-PDF
+type FlexAlignType = 'flex-start' | 'flex-end' | 'center' | 'stretch' | 'baseline';
+type TextAlignType = 'left' | 'right' | 'center' | 'justify';
+// --- HELPER FUNCTIONS ---
+// Converte l'allineamento testuale (left/center/right) in Flexbox (alignItems)
+const getFlexAlign = (align: string): FlexAlignType => {
+  switch (align) {
+    case 'left': return 'flex-start';
+    case 'right': return 'flex-end';
+    default: return 'center';
+  }
+};
+
+// Converte l'allineamento testuale in proprietà textAlign per <Text>
+// React-PDF accetta 'left' | 'right' | 'center' | 'justify'
+const getTextAlign = (align: string): TextAlignType => {
+  switch (align) {
+    case 'left': return 'left';
+    case 'right': return 'right';
+    default: return 'center';
+  }
+};
+
+
+// --- STYLES ---
 const styles = StyleSheet.create({
   page: {
     backgroundColor: '#FFFFFF',
     fontFamily: 'Roboto',
-    // IMPORTANT: Position relative here is needed so absolute children are relative to the page area.
     position: 'relative',
-    // No padding here. Padding goes on the content container.
   },
-
-  // --- LAYER 1 STYLES (Background) ---
-  // FIX: Defined this generic style to absolutely fill space.
   absoluteFill: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
   },
   fallbackBgColor: {
-    backgroundColor: '#333333', // Dark gray for readability when no image
+    backgroundColor: '#333333',
   },
   backgroundImage: {
     width: '100%',
@@ -41,150 +56,220 @@ const styles = StyleSheet.create({
     objectFit: 'cover',
   },
   overlay: {
-    // This also needs to fill space absolutely
     position: 'absolute',
     top: 0, left: 0, bottom: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.4)', // Medium dark overlay to ensure text pops
   },
-
-  // --- LAYER 2 STYLES (Content) ---
-  // This container sits naturally on top because it comes later in JSX.
   contentContainer: {
-    position: 'relative', // Normal flow
-    height: '100%', // Fill page height
-    padding: 40, // Padding applied here so text doesn't touch edges
-    flexDirection: 'column',
+    position: 'relative',
+    height: '100%',
+    width: '100%',
   },
 
-  // --- TEXT STYLES ---
-  header: {
-    marginBottom: 30,
-    // Text shadow helps readability over complex images
-    textShadow: '2px 2px 4px rgba(0,0,0,0.5)',
-  },
+  // TEXT STYLES
   title: {
     fontSize: 42,
     fontWeight: 700,
-    color: '#FFFFFF',
-    textAlign: 'center',
     textTransform: 'uppercase',
+    textShadow: '2px 2px 4px rgba(0,0,0,0.5)',
   },
-  descriptionSection: {
-    marginBottom: 30,
-    padding: 25,
-    // Subtle semi-transparent box for better contrast
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    border: '1px solid rgba(255, 255, 255, 0.2)',
+  descriptionBlock: {
+    padding: 20,
+    backgroundColor: 'rgba(0,0,0,0.2)', // Leggera ombra di sfondo per leggibilità
+    borderRadius: 8,
   },
   sectionTitle: {
     fontSize: 22,
     fontWeight: 700,
-    color: '#FFD700', // Gold
-    marginBottom: 12,
+    marginBottom: 8,
     textShadow: '1px 1px 2px rgba(0,0,0,0.3)',
   },
   text: {
     fontSize: 14,
-    color: '#FFFFFF',
-    lineHeight: 1.6,
+    lineHeight: 1.5,
   },
-  agendaSection: {
-    flex: 1,
-    padding: 25,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    borderRadius: 12,
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-  },
+
+  // AGENDA SPECIFIC
   agendaItemWrapper: {
-      marginBottom: 15,
-      flexDirection: 'row',
-      alignItems: 'flex-start',
+    marginBottom: 10,
+    flexDirection: 'row',
   },
   agendaBullet: {
     fontSize: 18,
-    color: '#FFD700',
-    marginRight: 12,
+    marginRight: 10,
     lineHeight: 1,
   },
   agendaItemText: {
     fontSize: 15,
-    color: '#FFFFFF',
     flex: 1,
     lineHeight: 1.4,
     fontWeight: 500,
+  },
+
+  // DYNAMIC LAYOUT BLOCK
+  sectionBlock: {
+    position: 'relative',
+    left: 4, // Padding laterale fisso
+    right: 40,
   }
 });
 
+// --- PROPS INTERFACE ---
 interface PosterData {
   title: string;
   description: string;
   agenda: string;
+  location?: string;
   imageUrl: string | null;
   showBackground: boolean;
+  layout?: StyleTemplate['layout'];
 }
 
 export const PosterDocument = ({ data }: { data: PosterData }) => {
-  // Safer default values
-  const safeTitle = data.title || "Event Title";
-  const safeDescription = data.description || "Event description goes here...";
+
+  // 1. Default Layout se non fornito (es. prima generazione o errore)
+  // Default layout esteso
+  const layout = data.layout || {
+    title: { position: 'top', align: 'center', color: 'red' },
+    description: { position: 'top', align: 'center', color: 'red' }, // FORZIAMO TOP
+    agenda: { position: 'center', align: 'center', color: 'red' },
+    location: { position: 'bottom', align: 'center', color: 'red' }
+};
+  // 2. Overlay Color (Default scuro se non c'è nel layout)
+  // Nota: Qui usiamo un default fisso, ma potremmo passare suggestedOverlayColor dai props se volessi
+  const overlayColor = 'rgba(0,0,0,0.4)';
+
+  // 3. Parsing Agenda
   const agendaItems = data.agenda ? data.agenda.split('\n').filter(i => i.trim()) : [];
 
-  // Logic: Show image ONLY if switch is ON AND we have a URL string.
-  const shouldRenderImage = data.imageUrl && typeof data.imageUrl === 'string';//data.showBackground &&
+  // --- LOGICA DI RAGGRUPPAMENTO ---
+      // Default robusto che copre i buchi
+    const defaultLayout = {
+        title: { position: 'top', align: 'center', color: '#FFFFFF' },
+        description: { position: 'center', align: 'center', color: '#FFFFFF' },
+        agenda: { position: 'center', align: 'left', color: '#FFFFFF' },
+        location: { position: 'bottom', align: 'center', color: '#FFFFFF' }
+    };
 
+    // Merge intelligente: se l'AI manda null, usiamo il default
+    const safeLayout = {
+        title: { ...defaultLayout.title, ...data.layout?.title },
+        description: { ...defaultLayout.description, ...data.layout?.description },
+        agenda: { ...defaultLayout.agenda, ...data.layout?.agenda },
+        location: { ...defaultLayout.location, ...data.layout?.location },
+    };
+
+    // Fix specifico per position=null
+    if (!safeLayout.title.position) safeLayout.title.position = 'top'; // Fallback sicuro
+    if (!safeLayout.description.position) safeLayout.description.position = 'top'; // Fallback sicuro
+    if (!safeLayout.agenda.position) safeLayout.agenda.position = 'bottom'; // Fallback sicuro
+    if (!safeLayout.location.position) safeLayout.location.position = 'bottom';
+
+    // Ora usa safeLayout invece di layout per costruire gli elements// Raggruppiamo gli elementi nelle 3 zone: TOP, CENTER, BOTTOM
+  const elements = [
+    { id: 'title', ...safeLayout.title, content: data.title, type: 'title' },
+    { id: 'description', ...safeLayout.description, content: data.description, type: 'description' },
+    { id: 'agenda', ...safeLayout.agenda, content: data.agenda, type: 'agenda' },
+    { id: 'location', ...safeLayout.location, content: data.location, type: 'location' }
+  ];
+
+  const topElements = elements.filter(e => e.position === 'top');
+  const centerElements = elements.filter(e => e.position === 'center');
+  const bottomElements = elements.filter(e => e.position === 'bottom');
+
+  // Renderizzatore generico di un elemento
+  const renderElement = (el: any) => {
+    // Calcola gli stili una volta sola per questo elemento
+    const alignStyle = {
+      alignItems: getFlexAlign(el.align)
+    };
+    const textAlignment = getTextAlign(el.align); // Variabile esplicita per textAlign
+
+    const colorStyle = { color: el.color || '#ebddddff' };
+
+    if (el.type === 'title') {
+      return (
+        <View key={el.id} style={[styles.sectionBlock, alignStyle]}>
+          <Text style={[styles.title, colorStyle, { textAlign: textAlignment }]}>
+            {el.content}
+          </Text>
+        </View>
+      );
+    }
+
+    if (el.type === 'description') {
+      return (
+        <View key={el.id} style={[styles.sectionBlock, alignStyle]}>
+          <View style={styles.descriptionBlock}>
+            {/* Titolo sezione opzionale */}
+            <Text style={[styles.sectionTitle, { color: '#FFD700', textAlign: textAlignment }]}>
+              About
+            </Text>
+            <Text style={[styles.text, colorStyle, { textAlign: textAlignment }]}>
+              {el.content}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (el.type === 'location') {
+      return (
+        <View key={el.id} style={[styles.sectionBlock, alignStyle]}>
+          <Text style={[styles.text, colorStyle, { textAlign: textAlignment, fontWeight: 700 }]}>
+            {el.content}
+          </Text>
+        </View>
+      );
+    }
+
+    if (el.type === 'agenda') {
+      const items = el.content ? el.content.split('\n') : [];
+      return (
+        <View key={el.id} style={[styles.sectionBlock, alignStyle]}>
+          <Text style={[styles.sectionTitle, { color: '#FFD700', textAlign: textAlignment, marginBottom: 5 }]}>
+            Agenda
+          </Text>
+          {items.map((item: string, i: number) => (
+            <Text key={i} style={[styles.text, colorStyle, { textAlign: textAlignment }]}>
+              • {item}
+            </Text>
+          ))}
+        </View>
+      );
+    }
+    return null;
+  };
   return (
-  <Document>
-    <Page size="A4" style={styles.page}>
-
-        {/* =================================================================
-            LAYER 1: BACKGROUND (Rendered first, sits at bottom)
-           ================================================================= */}
-        {/* FIX: Use the correctly named style here */}
+    <Document>
+      <Page size="A4" style={styles.page}>
+        {/* BACKGROUND (Invariato) */}
         <View style={styles.absoluteFill}>
-             {shouldRenderImage ? (
-                 // 1A. Has image and switch is ON
-                 <>
-                   {/* @ts-ignore */}
-                   <Image src={data.imageUrl} style={styles.backgroundImage} />
-                   <View style={styles.overlay} />
-                 </>
-             ) : (
-                 // 1B. No image or switch is OFF -> Show solid dark color
-                 // FIX: Use the correctly named style here combined with color
-                 <View style={[styles.absoluteFill, styles.fallbackBgColor]} />
-             )}
+          {data.showBackground && data.imageUrl ? (
+            <Image src={data.imageUrl} style={styles.backgroundImage} />
+          ) : null}
+          <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.4)' }]} />
         </View>
 
+        {/* CONTENT CONTAINER - FLEX COLUMN CHE COPRE TUTTA LA PAGINA */}
+        <View style={{ flex: 1, flexDirection: 'column', padding: 40, justifyContent: 'space-between' }}>
 
-        {/* =================================================================
-            LAYER 2: CONTENT (Rendered second, sits on top)
-           ================================================================= */}
-        <View style={styles.contentContainer}>
-            <View style={styles.header}>
-                <Text style={styles.title}>{safeTitle}</Text>
-            </View>
+          {/* TOP ZONE */}
+          <View style={{ width: '100%', justifyContent: 'flex-start' }}>
+            {topElements.map(renderElement)}
+          </View>
 
-            <View style={styles.descriptionSection}>
-                <Text style={styles.sectionTitle}>About the Event</Text>
-                <Text style={styles.text}>{safeDescription}</Text>
-            </View>
+          {/* CENTER ZONE (Flex 1 per espandersi e spingere bottom giù) */}
+          <View style={{ width: '100%', justifyContent: 'center', flex: 1 }}>
+            {centerElements.map(renderElement)}
+          </View>
 
-            <View style={styles.agendaSection}>
-                <Text style={styles.sectionTitle}>Agenda</Text>
-                {agendaItems.length > 0 ? (
-                    agendaItems.map((item, index) => (
-                    <View key={index} style={styles.agendaItemWrapper}>
-                        <Text style={styles.agendaBullet}>•</Text>
-                        <Text style={styles.agendaItemText}>{item}</Text>
-                    </View>
-                    ))
-                ) : (
-                    <Text style={styles.text}>Add agenda items...</Text>
-                )}
-            </View>
-      </View>
-    </Page>
-  </Document>
+          {/* BOTTOM ZONE */}
+          <View style={{ width: '100%', justifyContent: 'flex-end' }}>
+            {bottomElements.map(renderElement)}
+          </View>
+
+        </View>
+      </Page>
+    </Document>
   );
 };

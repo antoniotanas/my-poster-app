@@ -1,9 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  turbopack: {},
   webpack: (config) => {
-    config.resolve.alias.canvas = false; // Fix per @react-pdf/renderer
+    // Avoid trying to bundle native canvas in the browser
+    config.resolve.alias.canvas = false;
     return config;
   },
 };
