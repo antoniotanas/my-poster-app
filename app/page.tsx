@@ -188,7 +188,8 @@ export default function Home() {
             </div>
 
             {/* PREVIEW CONTAINER */}
-            <div className="bg-white p-4 rounded-b-2xl shadow-xl border border-slate-200 w-full min-h-[600px]">
+            {/* MODIFICA QUI: Rimosso min-h-[600px] e lasciato solo h-fit per adattarsi al contenuto */}
+            <div className="bg-white p-4 rounded-b-2xl shadow-xl border border-slate-200 w-full h-fit">
 
               {/* TAB 1: PDF PREVIEW */}
               <div className={activeTab === 'pdf' ? 'block' : 'hidden'}>
@@ -202,16 +203,14 @@ export default function Home() {
                   loading={isGenerating && activeTab === 'social'}
                   texts={{
                     title,
-                    description,   // <--- aggiunto
+                    description,
                     location,
                     agenda,
                   }}
                   overlayColor={extractedStyle?.suggestedOverlayColor}
-                />             {activeTab === 'social' && activeSocialUrl && (
-                  <div className="mt-4 p-3 bg-purple-50 text-purple-800 text-xs rounded border border-purple-100">
-                    <strong>Nota:</strong> I testi sono stati renderizzati dall'IA. Se ci sono errori, rigenera l'immagine.
-                  </div>
-                )}
+                />
+                
+                {/* RIMOSSO il blocco Nota: I testi... */}
               </div>
 
             </div>
